@@ -1,0 +1,13 @@
+{
+  "character": ["character/ronin-main.png"],
+  "crate": ["crate/ronin-crate.png", "crate/ronin-crate-open.png"],
+  "weapons": ["weapons/weapon-neon-katana.png", "weapons/weapon-shadow-katana.png", "weapons/weapon-void-blade.png", "weapons/weapon-solar-katana.png", "weapons/weapon-ash-blade.png", "weapons/weapon-ronin-katana.png"],
+  "helmets": ["helmets/helmet-shadow-mask.png", "helmets/helmet-oni.png", "helmets/helmet-void.png", "helmets/helmet-tactical.png", "helmets/helmet-ronin.png"],
+  "armors": ["armors/armor-shadow.png", "armors/armor-oni.png", "armors/armor-tactical.png", "armors/armor-nomad.png", "armors/armor-ronin.png"],
+  "cores": ["cores/core-solar.png", "cores/core-void.png", "cores/core-cyber.png", "cores/core-fusion.png", "cores/core-basic.png"],
+  "backItems": ["back-items/back-ronin-pack.png", "back-items/back-void-wings.png", "back-items/back-tactical-pack.png", "back-items/back-energy-tank.png", "back-items/back-sheath-pack.png"],
+  "accessories": [],
+  "backgrounds": [],
+  "effects": [],
+  "ui": []
+}
