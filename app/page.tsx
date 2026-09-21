@@ -61,7 +61,7 @@ export default function HomePage() {
           </div>
           <small className={`${styles.socialLabel} ${styles.fadeUp} ${styles.delay075}`}>MORE THAN A BOX</small>
           <div className={`${styles.iconRow} ${styles.fadeUp} ${styles.delay065}`}>
-            <button className={styles.iconBtn} type="button" aria-label="Character" onClick={() => router.push("/character")}>X</button>
+            <a className={styles.iconBtn} href="https://x.com/RB_RoninX" target="_blank" rel="noopener noreferrer" aria-label="Follow RONIN X on X">𝕏</a>
             <button className={styles.iconBtn} type="button" aria-label="Inventory" onClick={() => router.push("/inventory")}>◉</button>
             <button className={styles.iconBtn} type="button" aria-label="Market" onClick={() => router.push("/market")}>➤</button>
           </div>
