@@ -67,12 +67,9 @@ export default function HomePage() {
           </div>
         </section>
         <article className={styles.productCard} style={{ "--item-accent": featured.visualConfig.accent } as React.CSSProperties}>
-          <button className={`${styles.carouselArrow} ${styles.carouselPrev}`} aria-label="Previous equipment" onClick={() => setShowcaseIndex((showcaseIndex - 1 + showcase.length) % showcase.length)}>‹</button>
           <div className={styles.productThumb} key={featured.id}><img src={featured.image} alt={featured.name} loading="eager"/></div>
           <div className={styles.productBody}><h2>{featured.name}</h2><b className={styles.rarity}>{featured.rarity}</b><p>ATK +{featured.attack} &nbsp; DEF +{featured.defense}</p></div>
           <Link className={styles.cartBtn} href="/inventory">VIEW ITEM</Link>
-          <button className={`${styles.carouselArrow} ${styles.carouselNext}`} aria-label="Next equipment" onClick={() => setShowcaseIndex((showcaseIndex + 1) % showcase.length)}>›</button>
-          <div className={styles.carouselDots}>{showcase.map((item, index) => <button key={item.id} aria-label={`Show ${item.name}`} className={index === showcaseIndex ? styles.activeDot : ""} onClick={() => setShowcaseIndex(index)}/>)}</div>
         </article>
       </div>
     </div>

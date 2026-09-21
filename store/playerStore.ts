@@ -7,9 +7,13 @@ import { burnScrap, forgeCosts } from "@/lib/economy";
 import type { Rarity } from "@/data/rarity";
 
 type Toast = { id: number; message: string };
+type WalletProfile = Pick<PlayerState, "balance" | "inventory" | "equippedItems" | "scrap" | "crateHistory" | "crateBalance" | "isStarterClaimed" | "marketListings">;
 type PlayerState = {
   wallet: string | null;
   walletProvider: string | null;
+  walletChainId: string | null;
+  walletNativeBalance: string | null;
+  walletProfiles: Record<string, WalletProfile>;
   balance: number;
   inventory: string[];
   equippedItems: Partial<Record<Category, string>>;
@@ -27,7 +31,8 @@ type PlayerState = {
   muted: boolean;
   toasts: Toast[];
   connectWallet: () => void;
-  connectExternalWallet: (address: string, provider: string) => void;
+  connectExternalWallet: (address: string, provider: string, chainId?: string | null, nativeBalance?: string | null) => void;
+  updateWalletNetwork: (chainId: string | null, nativeBalance: string | null) => void;
   disconnectWallet: () => void;
   grantStarterIfEligible: () => void;
   equip: (id: string) => void;
@@ -55,11 +60,17 @@ const initialEquipped: Partial<Record<Category, string>> = {
   BACK: "back-sheath-pack",
 };
 
+const defaultProfile = (): WalletProfile => ({ balance: 50000, inventory: [...demoInventoryIds], equippedItems: { ...initialEquipped }, scrap: 240, crateHistory: [], crateBalance: 0, isStarterClaimed: false, marketListings: {} });
+const snapshotProfile = (state: PlayerState): WalletProfile => ({ balance: state.balance, inventory: state.inventory, equippedItems: state.equippedItems, scrap: state.scrap, crateHistory: state.crateHistory, crateBalance: state.crateBalance, isStarterClaimed: state.isStarterClaimed, marketListings: state.marketListings });
+
 export const usePlayerStore = create<PlayerState>()(
   persist(
     (set, get) => ({
       wallet: null,
       walletProvider: null,
+      walletChainId: null,
+      walletNativeBalance: null,
+      walletProfiles: {},
       balance: 50000,
       inventory: demoInventoryIds,
       equippedItems: initialEquipped,
@@ -84,16 +95,23 @@ export const usePlayerStore = create<PlayerState>()(
       dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
       connectWallet: () => {
         const address = "0x0182…8F3D";
-        const firstClaim = !get().starterClaims[address] && !get().starterClaims["0x0182…RONIN"];
-        set((state) => ({ wallet: address, walletProvider: "RONIN DEMO WALLET", crateBalance: state.crateBalance + (firstClaim ? 10 : 0), starterClaims: { ...state.starterClaims, [address]: true }, isStarterClaimed: true }));
+        const state = get();
+        const profiles = { ...state.walletProfiles, ...(state.wallet ? { [state.wallet.toLowerCase()]: snapshotProfile(state) } : {}) };
+        const profile = profiles[address.toLowerCase()] ?? defaultProfile();
+        const firstClaim = !state.starterClaims[address] && !state.starterClaims["0x0182…RONIN"];
+        set({ ...profile, wallet: address, walletProvider: "RONIN DEMO WALLET", walletChainId: null, walletNativeBalance: null, crateBalance: profile.crateBalance + (firstClaim ? 10 : 0), walletProfiles: profiles, starterClaims: { ...state.starterClaims, [address]: true }, isStarterClaimed: true });
         get().pushToast(firstClaim ? "STARTER DROP // 10 CRATES" : "WALLET CONNECTED");
       },
-      connectExternalWallet: (address, provider) => {
-        set({ wallet: address, walletProvider: provider });
+      connectExternalWallet: (address, provider, chainId = null, nativeBalance = null) => {
+        const state = get();
+        const profiles = { ...state.walletProfiles, ...(state.wallet ? { [state.wallet.toLowerCase()]: snapshotProfile(state) } : {}) };
+        const profile = profiles[address.toLowerCase()] ?? defaultProfile();
+        set({ ...profile, wallet: address, walletProvider: provider, walletChainId: chainId, walletNativeBalance: nativeBalance, walletProfiles: profiles });
         get().grantStarterIfEligible();
         get().pushToast(`${provider.toUpperCase()} CONNECTED`);
       },
-      disconnectWallet: () => { set({ wallet: null, walletProvider: null }); get().pushToast("WALLET DISCONNECTED"); },
+      updateWalletNetwork: (walletChainId, walletNativeBalance) => set({ walletChainId, walletNativeBalance }),
+      disconnectWallet: () => { const state = get(); set({ wallet: null, walletProvider: null, walletChainId: null, walletNativeBalance: null, walletProfiles: state.wallet ? { ...state.walletProfiles, [state.wallet.toLowerCase()]: snapshotProfile(state) } : state.walletProfiles }); get().pushToast("WALLET DISCONNECTED"); },
       grantStarterIfEligible: () => {
         const wallet = get().wallet;
         const state = get();
