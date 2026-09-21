@@ -8,11 +8,12 @@ import { usePlayerStore } from "@/store/playerStore";
 
 const links = [["/", "HOME"], ["/crates", "CRATES"], ["/character", "CHARACTER"], ["/inventory", "INVENTORY"], ["/market", "MARKET"]];
 type InjectedProvider = { request: (args: { method: string; params?: unknown[] }) => Promise<unknown>; on?: (event: string, handler: (...args: unknown[]) => void) => void; removeListener?: (event: string, handler: (...args: unknown[]) => void) => void; isMetaMask?: boolean; isCoinbaseWallet?: boolean; isOkxWallet?: boolean; isRonin?: boolean; providers?: InjectedProvider[] };
+type Eip6963Provider = { info: { name: string; rdns: string; uuid: string; icon: string }; provider: InjectedProvider };
 const walletOptions = [
-  { id: "metamask", name: "METAMASK", flag: "isMetaMask", logo: "/assets/ronin/ui/wallets/metamask.svg" },
-  { id: "coinbase", name: "COINBASE WALLET", flag: "isCoinbaseWallet", logo: "/assets/ronin/ui/wallets/coinbase-wallet.svg" },
-  { id: "okx", name: "OKX WALLET", flag: "isOkxWallet", logo: "/assets/ronin/ui/wallets/okx-wallet.svg" },
-  { id: "ronin", name: "RONIN WALLET", flag: "isRonin", logo: "/assets/ronin/ui/wallets/ronin-wallet.svg" },
+  { id: "metamask", name: "METAMASK", flag: "isMetaMask", match: "metamask", logo: "/assets/ronin/ui/wallets/metamask.svg" },
+  { id: "coinbase", name: "COINBASE WALLET", flag: "isCoinbaseWallet", match: "coinbase", logo: "/assets/ronin/ui/wallets/coinbase-wallet.svg" },
+  { id: "okx", name: "OKX WALLET", flag: "isOkxWallet", match: "okx", logo: "/assets/ronin/ui/wallets/okx-wallet.svg" },
+  { id: "ronin", name: "RONIN WALLET", flag: "isRonin", match: "ronin", logo: "/assets/ronin/ui/wallets/ronin-wallet.svg" },
 ] as const;
 
 const shortAddress = (address: string) => address.startsWith("0x") && address.length > 14 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
@@ -22,7 +23,6 @@ export function GameShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const wallet = usePlayerStore((state) => state.wallet);
   const walletProvider = usePlayerStore((state) => state.walletProvider);
-  const connect = usePlayerStore((state) => state.connectWallet);
   const connectExternal = usePlayerStore((state) => state.connectExternalWallet);
   const updateWalletNetwork = usePlayerStore((state) => state.updateWalletNetwork);
   const disconnect = usePlayerStore((state) => state.disconnectWallet);
@@ -30,17 +30,28 @@ export function GameShell({ children }: { children: React.ReactNode }) {
   const pushToast = usePlayerStore((state) => state.pushToast);
   const [walletModal, setWalletModal] = useState(false);
   const [accountMenu, setAccountMenu] = useState(false);
-  const [connecting, setConnecting] = useState(false);
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const discoveredProviders = useRef<Eip6963Provider[]>([]);
   const activeProvider = useRef<InjectedProvider | null>(null);
   const activeProviderName = useRef<string>("");
   useEffect(() => { grantStarterIfEligible(); }, [wallet, grantStarterIfEligible]);
-  const doConnect = () => { setConnecting(true); window.setTimeout(() => { connect(); setConnecting(false); setWalletModal(false); }, 450); };
+  useEffect(() => {
+    const announce = (event: Event) => {
+      const detail = (event as CustomEvent<Eip6963Provider>).detail;
+      if (detail?.provider && !discoveredProviders.current.some((entry) => entry.info.uuid === detail.info.uuid)) discoveredProviders.current.push(detail);
+    };
+    window.addEventListener("eip6963:announceProvider", announce);
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    return () => window.removeEventListener("eip6963:announceProvider", announce);
+  }, []);
   const connectInjected = async (option: typeof walletOptions[number]) => {
-    const injected = (window as typeof window & { ethereum?: InjectedProvider }).ethereum;
+    const browser = window as typeof window & { ethereum?: InjectedProvider; okxwallet?: InjectedProvider; coinbaseWalletExtension?: InjectedProvider; ronin?: { provider?: InjectedProvider } };
+    const announced = discoveredProviders.current.find((entry) => `${entry.info.rdns} ${entry.info.name}`.toLowerCase().includes(option.match));
+    const injected = browser.ethereum;
     const providers = injected?.providers?.length ? injected.providers : injected ? [injected] : [];
-    const provider = providers.find((entry) => Boolean(entry[option.flag as keyof InjectedProvider]));
-    if (!provider) { pushToast(`${option.name} NOT DETECTED`); return; }
+    const legacy = option.id === "okx" ? browser.okxwallet : option.id === "coinbase" ? browser.coinbaseWalletExtension : option.id === "ronin" ? browser.ronin?.provider : undefined;
+    const provider = announced?.provider ?? legacy ?? providers.find((entry) => Boolean(entry[option.flag as keyof InjectedProvider])) ?? (providers.length === 1 ? providers[0] : undefined);
+    if (!provider) { pushToast(`${option.name} EXTENSION NOT DETECTED`); return; }
     try {
       setConnectingId(option.id);
       const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
@@ -50,7 +61,7 @@ export function GameShell({ children }: { children: React.ReactNode }) {
       activeProviderName.current = option.name;
       connectExternal(accounts[0], option.name, chainId, formatNativeBalance(balanceHex));
       setWalletModal(false);
-    } catch { pushToast("WALLET CONNECTION CANCELLED"); }
+    } catch (error) { const message = error instanceof Error ? error.message : "Connection rejected"; pushToast(message.toUpperCase().includes("REJECT") ? "WALLET CONNECTION CANCELLED" : "WALLET CONNECTION FAILED"); }
     finally { setConnectingId(null); }
   };
   useEffect(() => {
@@ -81,6 +92,6 @@ export function GameShell({ children }: { children: React.ReactNode }) {
     </header>
     <main>{children}</main>
     <nav className="mobile-nav">{links.map(([href, label]) => <Link key={href} href={href} className={pathname === href ? "active" : ""}><span>{label.slice(0, 1)}</span>{label}</Link>)}</nav>
-    <AnimatePresence>{walletModal && <motion.div className="wallet-modal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setWalletModal(false)}><motion.section initial={{ scale: .95, y: 15 }} animate={{ scale: 1, y: 0 }} onClick={(event) => event.stopPropagation()}><button className="wallet-close" onClick={() => setWalletModal(false)}>CLOSE ×</button><small>ROBINHOOD MAINNET</small><h2>CONNECT WALLET</h2><p>Select an installed browser wallet. A connection request is sent only to the selected provider.</p><div className="wallet-options-grid">{walletOptions.map((option) => <button className="wallet-option" key={option.id} onClick={() => connectInjected(option)} disabled={Boolean(connectingId)}><img className="wallet-logo" src={option.logo} alt=""/><span><b>{option.name}</b><small>{connectingId === option.id ? "CONNECTING..." : "BROWSER EXTENSION"}</small></span></button>)}</div><div className="wallet-divider"><span>OR LOCAL PREVIEW</span></div><button className="wallet-option demo-wallet-option" onClick={doConnect} disabled={connecting}><i>RX</i><span><b>RONIN DEMO WALLET</b><small>{connecting ? "CONNECTING..." : "LOCAL PROTOTYPE CONNECTOR"}</small></span></button></motion.section></motion.div>}</AnimatePresence>
+    <AnimatePresence>{walletModal && <motion.div className="wallet-modal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setWalletModal(false)}><motion.section initial={{ scale: .95, y: 15 }} animate={{ scale: 1, y: 0 }} onClick={(event) => event.stopPropagation()}><button className="wallet-close" onClick={() => setWalletModal(false)}>CLOSE ×</button><small>MAINNET WALLET</small><h2>CONNECT WALLET</h2><p>Select an installed wallet. The site supports the EIP-6963 multi-wallet standard and legacy browser providers.</p><div className="wallet-options-grid">{walletOptions.map((option) => <button className="wallet-option" key={option.id} onClick={() => connectInjected(option)} disabled={Boolean(connectingId)}><img className="wallet-logo" src={option.logo} alt=""/><span><b>{option.name}</b><small>{connectingId === option.id ? "CONNECTING..." : "BROWSER EXTENSION"}</small></span></button>)}</div></motion.section></motion.div>}</AnimatePresence>
   </>;
 }
